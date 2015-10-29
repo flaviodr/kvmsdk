@@ -14,7 +14,8 @@ def find_a_domain(conn, domain):
 	try:
 		# Search for a virtual machine (aka domain) on the hypervisor
 		# connection
-		dom = conn.lookupByName(domain) except:
+		dom = conn.lookupByName(domain)
+	except:
 		# Virtual machine not found, returning 0
 		return 0
 
@@ -22,9 +23,16 @@ def find_a_domain(conn, domain):
 
 ## Your code starts here
 if __name__ == "__main__":
-	vm_name = 'myvm1'
+	if len(sys.argv) < 2:
+		print "Usage\n%s <virtual machine name>" % sys.argv[0]
+		sys.exit(1)
+
+	vm_name = sys.argv[1]
 	con = connect_to_hypervisor()
 	ID = find_a_domain(con, vm_name)
+
+	# close the open connection
+	con.close()
 
 	if ID > 0: 
 		print "Domain %s is running " % vm_name
@@ -34,3 +42,4 @@ if __name__ == "__main__":
 		# If ID is 0, it means that the virtual machine does not exist
 		# on the hypervisor
 		print "Domain %s not found on this hypervisor " % vm_name
+
