@@ -69,6 +69,9 @@ virDomainInfo *get_guest_info(virConnectPtr conn,
 		// Get generic domain information
 		virDomainGetInfo(dom, &info);
 
+        // free domain resources
+        virDomainFree(dom);
+
 		memcpy(&domain_array[i], &info, sizeof(virDomainInfo));
 
 		// Replace the maxMem field with the information we want.
@@ -112,7 +115,7 @@ int main(int argc, char *argv[])
 
 	// Get all active domains
 	activeDomains = malloc(sizeof(int) * numDomains);
-	virConnectListDomains(conn, activeDomains, numDomains);
+ 	virConnectListDomains(conn, activeDomains, numDomains);
 
 	// Print header
 	printf("%-15s | %4s | %7s | %9s | %28s\n",
@@ -156,6 +159,9 @@ int main(int argc, char *argv[])
 
 		// Print CPU utilization percentage
 		printf("%-5.2f %%\n", (double)100 * fst_measure[i].cpuTime / sum);
+
+        // free domain resources
+        virDomainFree(dom);
 	}
 
 	// Let's free the malloced structures
