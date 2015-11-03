@@ -4,66 +4,76 @@
 #include <stdlib.h>
 #include <libvirt/libvirt.h>
 
-virConnectPtr connect_to_hypervisor(){
+#define SCREEN_COLS 76
+
+virConnectPtr connect_to_hypervisor()
+{
 	virConnectPtr conn;
 
 	// Opens a read only connection to the hypervisor
 	conn = virConnectOpenReadOnly("");
-        if (conn == NULL) {
-                fprintf(stderr, "Not able to connect to the localhost hypervisor\n");
-                exit(1);
-        }
+    if (conn == NULL) {
+        fprintf(stderr, "Not able to connect to the localhost hypervisor\n");
+        exit(1);
+    }
 
 	return conn;
 }
 
-int find_a_domain(virConnectPtr conn, char *domain){
+int find_a_domain(virConnectPtr conn, char *domain)
+{
 	virDomainPtr dom;
 
 	// Search for a virtual machine (aka domain) on the hypervisor
 	// connection
 	dom = virDomainLookupByName(conn, domain);
-        if (!dom) {
-                return 0;
-        } else {
-		return virDomainGetID(dom);
-	}
+    if (!dom)
+        return 0;
+
+    return virDomainGetID(dom);
 }
 
 
-virDomainInfo *get_timestamp(virConnectPtr conn, int numDomains, int *activeDomains){
+virDomainInfo *get_guest_info(virConnectPtr conn,
+                              int numDomains,
+                              int *activeDomains)
+{
 	int i;
 
 	virDomainInfo *domain_array;
-        virDomainInfo info;
-        virDomainPtr dom;
-	virDomainMemoryStatPtr memstats = NULL; 
+    virDomainInfo info;
+    virDomainPtr dom;
+    virDomainMemoryStatStruct memstats[VIR_DOMAIN_MEMORY_STAT_NR];
 
 	// the array used to return information about domains
-	domain_array = malloc(sizeof(virDomainInfo) * numDomains);
-
-	// Structure used to grab memory informatoin
-	memstats = malloc(VIR_DOMAIN_MEMORY_STAT_NR*sizeof(virDomainMemoryStatStruct));
+	domain_array = (virDomainInfo*)malloc(sizeof(virDomainInfo) * numDomains);
+    if (domain_array == NULL) {
+        fprintf(stderr, "Cannot allocate memory to domain_array.\n");
+        virConnectClose(conn);
+        exit(1);
+    }
 
 	for (i = 0 ; i < numDomains ; i++) {
 		dom = virDomainLookupByID(conn, activeDomains[i]);
-		
+
 		// Grab information about the domain memory statistics
 		// VIR_DOMAIN_MEMORY_STAT_NR means that you want all the mem info
-		virDomainMemoryStats(dom, memstats, VIR_DOMAIN_MEMORY_STAT_NR, 0);
-		
+		virDomainMemoryStats(dom,
+                (virDomainMemoryStatPtr)&memstats,
+                VIR_DOMAIN_MEMORY_STAT_NR,
+                0);
+
 		// Get generic domain information
 		virDomainGetInfo(dom, &info);
 
 		memcpy(&domain_array[i], &info, sizeof(virDomainInfo));
 
 		// Replace the maxMem field with the information we want.
-		// Keeping it in the domain info to move with the domainID during qsort()
-		domain_array[i].maxMem = memstats[VIR_DOMAIN_MEMORY_STAT_MINOR_FAULT].val/1024;
+		// Keeping it in the domain info to move with the domainID
+        // during qsort()
+		domain_array[i].maxMem =
+            memstats[VIR_DOMAIN_MEMORY_STAT_MINOR_FAULT].val / 1024;
 	}
-	
-	// Free the memstats structure but not domain_array yet (it will be returned)
-	free(memstats);
 
 	return domain_array;
 }
@@ -77,74 +87,79 @@ int compare(const void *ptr1, const void *ptr2){
 		return -1;
 	else if (ptr1p->cpuTime < ptr2p->cpuTime)
 		return 1;
-	else 
-		return 0;
+
+	return 0;
 }
 
 // The application starts here
 int main(int argc, char *argv[])
 {
 	virConnectPtr conn;
-	int numDomains, i, sum = 0;
+	int numDomains, i;
 	int *activeDomains;
+    long long sum = 0;
 	virDomainPtr dom;
-	virDomainInfoPtr info;
-	virDomainInfo *array, *array2;
-
-	info = malloc(sizeof(virDomainInfo));
+	virDomainInfo info;
+	virDomainInfo *fst_measure, *snd_measure;
 
 	conn = connect_to_hypervisor();
 
 	// Get the Number of guests on that hypervisor
 	numDomains = virConnectNumOfDomains(conn);
 
-	activeDomains = malloc(sizeof(int) * numDomains);
 	// Get all active domains
+	activeDomains = malloc(sizeof(int) * numDomains);
 	virConnectListDomains(conn, activeDomains, numDomains);
-	
+
 	// Print header
-	printf("                  Name    vCPU   Memory    Mem fault   Proprtional CPU Utilization\n");
-	printf("----------------------------------------------------------------------------------\n");
+	printf("%-15s | %4s | %7s | %9s | %28s\n",
+           "Name", "vCPU", "Memory", "Mem fault",
+           "Proportional CPU Utilization");
+    for (i = 0; i < SCREEN_COLS; ++i)
+        printf("-");
+    printf("\n");
 
 	// Capture total CPU utilization and memory faults in two instants
-	array = get_timestamp(conn, numDomains, activeDomains);
+	fst_measure = get_guest_info(conn, numDomains, activeDomains);
+
 	// Sleep for 1 second in order to grab the VM stats during this time
 	sleep(1);
-	array2 = get_timestamp(conn, numDomains, activeDomains);
+	snd_measure = get_guest_info(conn, numDomains, activeDomains);
 
-	// Putting the CPU and Memory differences in the virDomainInfo for qsort()	
+	// Putting the CPU and Memory differences in the virDomainInfo for qsort()
 	for (i = 0 ; i < numDomains ; i++) {
-		array[i].maxMem = array2[i].maxMem - array[i].maxMem;
-		array[i].cpuTime = array2[i].cpuTime - array[i].cpuTime;
-		sum += array[i].cpuTime;
+		fst_measure[i].maxMem = snd_measure[i].maxMem - fst_measure[i].maxMem;
+		fst_measure[i].cpuTime = snd_measure[i].cpuTime - fst_measure[i].cpuTime;
+		sum += fst_measure[i].cpuTime;
 	}
 
-	// array2 is useless now on
-	free(array2);
-	
-	// sort the machines by the most used one
-	qsort(array, numDomains, sizeof(virDomainInfo), &compare);
+	// second measurement is useless from now on
+	free(snd_measure);
 
+	// sort the machines by the most used one
+	qsort(fst_measure, numDomains, sizeof(virDomainInfo), &compare);
 
 	// List all the domains and print the info for each
 	for (i = 0 ; i < numDomains ; i++) {
 		dom = virDomainLookupByID(conn, activeDomains[i]);
-		virDomainGetInfo(dom, info); 
+		virDomainGetInfo(dom, &info);
 
 		// Print domain information
-		printf("%22s   %4d  ", virDomainGetName(dom), info->nrVirtCpu);
+		printf("%*.*s | %4d | ", 15, 15, virDomainGetName(dom), info.nrVirtCpu);
 
 		// Print memory information
-		printf("%7d      %4lu ", (int) info->memory/1024, array[i].maxMem/1024);
+		printf("%7d | %9lu | ", (int)info.memory / 1024,
+                             fst_measure[i].maxMem / 1024);
 
 		// Print CPU utilization percentage
-		printf("          %5.2f %% \n", (double) 100*array[i].cpuTime/sum);
+		printf("%13.2f %%\n", (double)100 * fst_measure[i].cpuTime / sum);
 	}
 
 	// Let's free the malloced structures
-	free(array);
-	free(info);
+	free(fst_measure);
 	free(activeDomains);
-	
+
+    virConnectClose(conn);
+
 	return 0;
 }
