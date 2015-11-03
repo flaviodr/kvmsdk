@@ -44,6 +44,9 @@ virDomainInfo *get_guest_info(virConnectPtr conn,
     virDomainInfo info;
     virDomainPtr dom;
     virDomainMemoryStatStruct memstats[VIR_DOMAIN_MEMORY_STAT_NR];
+    memset(memstats,
+           0,
+           sizeof(virDomainMemoryStatStruct) * VIR_DOMAIN_MEMORY_STAT_NR);
 
 	// the array used to return information about domains
 	domain_array = (virDomainInfo*)malloc(sizeof(virDomainInfo) * numDomains);
@@ -145,14 +148,14 @@ int main(int argc, char *argv[])
 		virDomainGetInfo(dom, &info);
 
 		// Print domain information
-		printf("%*.*s | %4d | ", 15, 15, virDomainGetName(dom), info.nrVirtCpu);
+		printf("%-*.*s | %4d | ", 15, 15, virDomainGetName(dom), info.nrVirtCpu);
 
 		// Print memory information
 		printf("%7d | %9lu | ", (int)info.memory / 1024,
                              fst_measure[i].maxMem / 1024);
 
 		// Print CPU utilization percentage
-		printf("%13.2f %%\n", (double)100 * fst_measure[i].cpuTime / sum);
+		printf("%-5.2f %%\n", (double)100 * fst_measure[i].cpuTime / sum);
 	}
 
 	// Let's free the malloced structures
