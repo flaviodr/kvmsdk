@@ -94,9 +94,12 @@ int main(int argc, char *argv[])
 	info = malloc(sizeof(virDomainInfo));
 
 	conn = connect_to_hypervisor();
+
+	// Get the Number of guests on that hypervisor
 	numDomains = virConnectNumOfDomains(conn);
 
 	activeDomains = malloc(sizeof(int) * numDomains);
+	// Get all active domains
 	virConnectListDomains(conn, activeDomains, numDomains);
 	
 	// Print header
@@ -105,6 +108,7 @@ int main(int argc, char *argv[])
 
 	// Capture total CPU utilization and memory faults in two instants
 	array = get_timestamp(conn, numDomains, activeDomains);
+	// Sleep for 1 second in order to grab the VM stats during this time
 	sleep(1);
 	array2 = get_timestamp(conn, numDomains, activeDomains);
 
@@ -121,6 +125,8 @@ int main(int argc, char *argv[])
 	// sort the machines by the most used one
 	qsort(array, numDomains, sizeof(virDomainInfo), &compare);
 
+
+	// List all the domains and print the info for each
 	for (i = 0 ; i < numDomains ; i++) {
 		dom = virDomainLookupByID(conn, activeDomains[i]);
 		virDomainGetInfo(dom, info); 
