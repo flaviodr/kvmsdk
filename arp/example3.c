@@ -2,64 +2,61 @@
 #include <stdlib.h>
 #include <libvirt/libvirt.h>
 
-virConnectPtr connect_to_hypervisor(){
-	virConnectPtr conn;
+virConnectPtr connect_to_hypervisor()
+{
+    virConnectPtr conn;
 
-	// Opens a read only connection to the hypervisor
-	conn = virConnectOpenReadOnly("");
-        if (conn == NULL) {
-                fprintf(stderr, "Not able to connect to the localhost hypervisor\n");
-                exit(1);
-        }
+    // opens a read only connection to the hypervisor
+    conn = virConnectOpenReadOnly("");
+    if (conn == NULL) {
+        fprintf(stderr, "Not able to connect to the localhost hypervisor\n");
+        exit(1);
+    }
 
-	return conn;
+    return conn;
 }
 
-int find_a_domain(virConnectPtr conn, char *domain){
-	virDomainPtr dom;
-	char *xml;
+int find_a_domain(virConnectPtr conn, char *domain)
+{
+    virDomainPtr dom;
 
-	// Search for a virtual machine (aka domain) on the hypervisor
-	// connection
-	dom = virDomainLookupByName(conn, domain);
-        if (!dom) {
-                return 0;
-        } else {
-		return virDomainGetID(dom);
-	}
+    // search for a virtual machine (aka domain) on the hypervisor
+    // connection
+    dom = virDomainLookupByName(conn, domain);
+    if (!dom)
+        return 0;
 
-	xml = virDomainGetXMLDesc(dom, VIR_DOMAIN_XML_SECURE);
-
-	printf("%s\n", xml);
-	
+    return virDomainGetID(dom);
 }
 
 int main(int argc, char *argv[])
 {
-	virConnectPtr conn;
-	int id;
-	char *vm_name;
+    virConnectPtr conn;
+    int id;
+    char *vm_name;
 
-	if (argc < 2){
-		printf("Usage\n%s <virtual machine name\n", argv[0]);
-		exit(1);
-	} else {
-		vm_name = argv[1];
-	}
+    if (argc < 2) {
+        printf("Usage: %s <virtual machine name>\n", argv[0]);
+        exit(1);
+    }
 
-	conn = connect_to_hypervisor();
-	id = find_a_domain(conn, vm_name);
-	virConnectClose(conn);
+    vm_name = argv[1];
 
-	if (id > 0){
-		printf("Domain %s is running\n", vm_name);
-	} else if (id < 0){
-		printf("Domain %s is NOT running\n", vm_name);
-	} else { 
-		// If ID is 0, it means that the virtual machine does not exist
-		// on the hypervisor
-		printf("Domain %s not found on this hypervisor\n", vm_name);
-	}
+    conn = connect_to_hypervisor();
+    id = find_a_domain(conn, vm_name);
+    virConnectClose(conn);
 
-	return 0;
+    // guest is running
+    if (id > 0)
+        printf("Domain %s is running\n", vm_name);
+
+    // guest is not running
+    else if (id < 0)
+        printf("Domain %s is NOT running\n", vm_name);
+
+    // guest does not exist
+    else
+        printf("Domain %s not found on this hypervisor\n", vm_name);
+
+    return 0;
 }
